@@ -1,0 +1,72 @@
+# .github/workflows/shared-pull-request.yml
+name: Debug Environment Detection and Branch Name Validation on PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'aws/dev/**'
+      - 'aws/qa/**'
+      - 'aws/prod/**'
+      - 'aws/shared-services/**'
+
+jobs:
+  validate-and-debug:
+    runs-on: ubuntu-latest
+
+    # Strategy matrix to identify combinations of environments and regions
+    strategy:
+      matrix:
+        include:
+          - environment: dev
+            region: us-west-1
+            path: 'aws/dev/us-west-1/**'
+          - environment: dev
+            region: us-east-1
+            path: 'aws/dev/us-east-1/**'
+          - environment: qa
+            region: us-west-1
+            path: 'aws/qa/us-west-1/**'
+          - environment: prod
+            region: us-west-1
+            path: 'aws/prod/us-west-1/**'
+          - environment: prod
+            region: us-east-1
+            path: 'aws/prod/us-east-1/**'
+          - environment: shared-services
+            region: us-west-1
+            path: 'aws/shared-services/**'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Validate Branch Naming Convention
+        run: |
+          echo "Validating branch name: ${{ github.head_ref }}"
+          if [[ ! "${{ github.head_ref }}" =~ ^DEVOPS-[0-9]+$ ]]; then
+            echo "Branch name does not match the required pattern (DEVOPS-xxxx)."
+            exit 1
+          fi
+          echo "Branch name is valid."
+        shell: bash
+
+      - name: Print Debug Information
+        if: contains(github.event.pull_request.changed_files, matrix.path)
+        run: |
+          echo "Detected environment: ${{ matrix.environment }}"
+          echo "Detected region: ${{ matrix.region }}"
+          echo "Files changed in path: ${{ matrix.path }}"
+          git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+
+      - name: Configure AWS Region
+        run: |
+          echo "Configuring AWS region to ${{ matrix.region }}"
+        env:
+          AWS_REGION: ${{ matrix.region }}
+
+      - name: Print Environment Variables
+        run: |
+          echo "Environment: ${{ matrix.environment }}"
+          echo "Region: ${{ matrix.region }}"
