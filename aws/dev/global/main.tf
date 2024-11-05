@@ -1,32 +1,61 @@
-// Include the centralized locals
-module "account_info" {
-  source = "github.com/yourorg/offbeatops-terraform-modules//aws/locals.tf"
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.0"
+    }
+  }
+
+  backend "s3" {
+    bucket         = "dev-terraform-state"
+    key            = "state/dev-terraform-state-global.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "dev-terraform-locks"
+    encrypt        = true
+  }
+}
+
+// Define the AWS provider with the derived region
+provider "aws" {
+  region = local.region
 }
 
 // Derive the region and environment from the directory structure
 locals {
-  path_parts    = split("/", path.cwd)  // Split the current working directory into parts
-  environment   = local.path_parts[2]   // Assuming the structure is aws/{environment}/{region}
-  region        = local.path_parts[3]    // Get the region part
+  path_parts  = split("/", path.cwd) // Split the current working directory into parts
+  environment = local.path_parts[2]   // Assuming the structure is aws/{environment}/{region}
+  region      = local.path_parts[3]    // Get the region part
 
-  // Set region to 'us-east-1' if the folder is 'global'
-  region        = local.region == "global" ? "us-east-1" : local.region
-  
-  // Reference the account mappings using the environment
-  current_account = local.account_mappings[local.environment]  // Uses the environment as the key
+  // Set region to 'us-east-1' for configuration, but keep 'global' for naming if applicable
+  effective_region = local.region == "global" ? "us-east-1" : local.region
+  region_name_part = local.region == "global" ? "global" : local.region
+
+  // Derive the table name using environment and region name part (preserve 'global')
+  table_name = join("-", ["dynamodb", local.environment, local.region_name_part])
 }
 
-module "aws_null_label" {
-  source      = "github.com/yourorg/offbeatops-terraform-modules//aws/L1/aws_null_label"
-  
-  namespace     = "your-namespace"
-  account_id    = local.current_account.id
-  account_name  = local.current_account.name
-  environment   = local.environment
-  region        = local.region
-  owner         = "team-xyz"  // Assuming owner is a constant or can be derived differently
+module "dynamodb" {
+  source     = "github.com/yourorg/offbeatops-terraform-modules//aws/L1/dynamodb"
+  table_name = local.table_name
+  tags       = module.aws_info.tags
 }
 
-output "labels" {
-  value = module.aws_null_label.labels
+// S3 bucket for the global environment, shared across other environments
+resource "aws_s3_bucket" "shared_bucket" {
+  bucket = "shared-${local.environment}-bucket"
+  acl    = "private"
+
+  tags = merge(
+    module.aws_info.tags,  // Standardized tags from aws_info module
+    {
+      "Name" = "shared-${local.environment}-bucket"
+    }
+  )
+}
+
+// Include the aws_info module
+module "aws_info" {
+  source   = "github.com/yourorg/offbeatops-terraform-modules//aws/L1/aws_info"
+  environment = local.environment
+  region      = local.region
 }
