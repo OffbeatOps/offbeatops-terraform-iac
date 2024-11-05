@@ -7,7 +7,7 @@ This repository manages the infrastructure for multiple environments (dev, qa, p
 This terraform represents a multi environment and region EKS deployment. Ideally, this is changed slightly as to deploy a hub/spoke model of clusters across regions and environments. In this scenario, there would be a "hub" cluster in the shared-services region, that would be responsible for deploying apps across clusters using argoCD.
 
 Ideally, apps are served from multiple regions and geo-routing applied via a cloudfront distribution or global accelator.
-![alt text](multi-region.jpg)
+![alt text](images/multi-region.jpg)
 
 # Scaling
 These clusters are built with karpenter auto-scaling in mind. The clusters are built initially with fargate nodes simply to get the karpenter workload running. From there, karpenter will be responsible for responding to scheduling events and will dynamically scale the cluster in the most cost efficient way; using a the AWS Pricing API to optimize compute costs. It is also capable of deploying workloads safely into spot instance nodes by utilizing interuption handling.
